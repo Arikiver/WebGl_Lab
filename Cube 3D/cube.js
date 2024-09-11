@@ -49,7 +49,9 @@ var InitDemo = function () {
 	gl.frontFace(gl.CCW);
 	gl.cullFace(gl.BACK);
 
+	//
 	// Create shaders
+	// 
 	var vertexShader = gl.createShader(gl.VERTEX_SHADER);
 	var fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
 
@@ -82,9 +84,11 @@ var InitDemo = function () {
 		return;
 	}
 
+	//
 	// Create buffer
-	var boxVertices = [
-		// X, Y, Z           R, G, B
+	//
+	var boxVertices = 
+	[ // X, Y, Z           R, G, B
 		// Top
 		-1.0, 1.0, -1.0,   0.5, 0.5, 0.5,
 		-1.0, 1.0, 1.0,    0.5, 0.5, 0.5,
@@ -122,13 +126,31 @@ var InitDemo = function () {
 		1.0, -1.0, -1.0,    0.5, 0.5, 1.0,
 	];
 
-	var boxIndices = [
-		0, 1, 2, 0, 2, 3,
-    5, 4, 6, 6, 4, 7,
-    8, 9, 10, 8, 10, 11,
-		13, 12, 14, 15, 14, 12,
-    16, 17, 18, 16, 18, 19,
-    21, 20, 22, 22, 20, 23
+	var boxIndices =
+	[
+		// Top
+		0, 1, 2,
+		0, 2, 3,
+
+		// Left
+		5, 4, 6,
+		6, 4, 7,
+
+		// Right
+		8, 9, 10,
+		8, 10, 11,
+
+		// Front
+		13, 12, 14,
+		15, 14, 12,
+
+		// Back
+		16, 17, 18,
+		16, 18, 19,
+
+		// Bottom
+		21, 20, 22,
+		22, 20, 23
 	];
 
 	var boxVertexBufferObject = gl.createBuffer();
@@ -142,25 +164,26 @@ var InitDemo = function () {
 	var positionAttribLocation = gl.getAttribLocation(program, 'vertPosition');
 	var colorAttribLocation = gl.getAttribLocation(program, 'vertColor');
 	gl.vertexAttribPointer(
-		positionAttribLocation,
-		3,
-		gl.FLOAT,
+		positionAttribLocation, // Attribute location
+		3, // Number of elements per attribute
+		gl.FLOAT, // Type of elements
 		gl.FALSE,
-		6 * Float32Array.BYTES_PER_ELEMENT,
-		0
+		6 * Float32Array.BYTES_PER_ELEMENT, // Size of an individual vertex
+		0 // Offset from the beginning of a single vertex to this attribute
 	);
 	gl.vertexAttribPointer(
-		colorAttribLocation,
-		3,
-		gl.FLOAT,
+		colorAttribLocation, // Attribute location
+		3, // Number of elements per attribute
+		gl.FLOAT, // Type of elements
 		gl.FALSE,
-		6 * Float32Array.BYTES_PER_ELEMENT,
-		3 * Float32Array.BYTES_PER_ELEMENT
+		6 * Float32Array.BYTES_PER_ELEMENT, // Size of an individual vertex
+		3 * Float32Array.BYTES_PER_ELEMENT // Offset from the beginning of a single vertex to this attribute
 	);
 
 	gl.enableVertexAttribArray(positionAttribLocation);
 	gl.enableVertexAttribArray(colorAttribLocation);
 
+	// Tell OpenGL state machine which program should be active.
 	gl.useProgram(program);
 
 	var matWorldUniformLocation = gl.getUniformLocation(program, 'mWorld');
@@ -178,26 +201,27 @@ var InitDemo = function () {
 	gl.uniformMatrix4fv(matViewUniformLocation, gl.FALSE, viewMatrix);
 	gl.uniformMatrix4fv(matProjUniformLocation, gl.FALSE, projMatrix);
 
+	var xRotationMatrix = new Float32Array(16);
+	var yRotationMatrix = new Float32Array(16);
+
 	//
 	// Main render loop
 	//
 	var identityMatrix = new Float32Array(16);
 	mat4.identity(identityMatrix);
-	var time = 0;
-	function render() {
-		gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-
-		// Apply sinusoidal scaling
-		var scaleFactor = Math.abs(Math.sin(time)) + 0.5; // Scale between 0.5 and 1.5
-		mat4.identity(worldMatrix);
-		mat4.scale(worldMatrix, worldMatrix, [scaleFactor, scaleFactor, scaleFactor]);
-
+	var angle = 0;
+	var loop = function () {
+		angle = performance.now() / 1000 / 6 * 2 * Math.PI;
+		mat4.rotate(yRotationMatrix, identityMatrix, angle, [0, 1, 0]);
+		mat4.rotate(xRotationMatrix, identityMatrix, angle / 4, [1, 0, 0]);
+		mat4.mul(worldMatrix, yRotationMatrix, xRotationMatrix);
 		gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, worldMatrix);
 
+		gl.clearColor(0.75, 0.85, 0.8, 1.0);
+		gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
 		gl.drawElements(gl.TRIANGLES, boxIndices.length, gl.UNSIGNED_SHORT, 0);
 
-		time += 0.02; // Increment time for the next frame
-		requestAnimationFrame(render);
+		requestAnimationFrame(loop);
 	};
-	requestAnimationFrame(render);
+	requestAnimationFrame(loop);
 };
