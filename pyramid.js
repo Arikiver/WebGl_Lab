@@ -174,21 +174,21 @@ var InitDemo = function () {
         mat4.rotate(xRotationMatrix, identityMatrix, angle / 4, [1, 0, 0]);
         mat4.mul(worldMatrix, yRotationMatrix, xRotationMatrix);
         gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, worldMatrix);
-
+    
         gl.clearColor(0.75, 0.85, 0.8, 1.0);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-
-        // Draw each face with its corresponding color
-        for (let i = 0; i < faceColors.length; i++) {
+    
+        // Draw the pyramid faces
+        for (let i = 0; i < 4; i++) {
             gl.uniform3fv(faceColorUniformLocation, faceColors[i]);
             gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, i * 3 * Uint16Array.BYTES_PER_ELEMENT);
         }
-
-        // Draw bottom face
+    
+        // Draw bottom face (2 triangles, 6 indices)
         gl.uniform3fv(faceColorUniformLocation, faceColors[4]);
         gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 12 * Uint16Array.BYTES_PER_ELEMENT);
-
+    
         requestAnimationFrame(loop);
-    };
+    };    
     requestAnimationFrame(loop);
 };

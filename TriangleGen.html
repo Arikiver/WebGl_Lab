@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Triangle with RGB Color</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .input-box {
+            margin-bottom: 10px;
+        }
+        .input-box label {
+            display: inline-block;
+            width: 40px;
+        }
+        .input-box input {
+            width: 50px;
+            margin-right: 10px;
+        }
+        button {
+            margin-top: 20px;
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Draw a Triangle with WebGL</h1>
+
+    <div id="input-form">
+        <div class="input-box">
+            <label>X1:</label> <input type="number" id="x1" step="0.01">
+            <label>Y1:</label> <input type="number" id="y1" step="0.01">
+        </div>
+        <div class="input-box">
+            <label>X2:</label> <input type="number" id="x2" step="0.01">
+            <label>Y2:</label> <input type="number" id="y2" step="0.01">
+        </div>
+        <div class="input-box">
+            <label>X3:</label> <input type="number" id="x3" step="0.01">
+            <label>Y3:</label> <input type="number" id="y3" step="0.01">
+        </div>
+        <div class="input-box">
+            <label>R:</label> <input type="number" id="r" min="0" max="255">
+            <label>G:</label> <input type="number" id="g" min="0" max="255">
+            <label>B:</label> <input type="number" id="b" min="0" max="255">
+        </div>
+
+        <button onclick="drawTriangle()">Draw Triangle</button>
+    </div>
+
+    <canvas id="glCanvas" width="500" height="500"></canvas>
+
+    <script src="TriangleGen.js"></script>
+</body>
+</html>
