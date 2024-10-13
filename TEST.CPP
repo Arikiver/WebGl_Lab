@@ -1,324 +1,323 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
-#include <vector>
 #include <cmath>
 
-// Screen size
-const int SCREEN_WIDTH = 800;
-const int SCREEN_HEIGHT = 600;
+// Function prototypes
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void processInput(GLFWwindow* window);
 
-// Ellipse parameters
-float centerX = SCREEN_WIDTH / 2;
-float centerY = SCREEN_HEIGHT / 2;
-float rx = 200; // semi-major axis (initial)
-float ry = 100; // semi-minor axis (initial)
-float initialRx = rx;
-float initialRy = ry;
+// Settings
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
 
-// Vertex Shader source
+// Vertex Shader source code
 const char* vertexShaderSource = R"(
-  #version 330 core
-  layout(location = 0) in vec2 aPos;
-  void main() {
-      gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);
-  }
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+
+out vec3 FragPos;
+out vec3 Normal;
+
+uniform mat4 transform;
+
+void main() {
+ FragPos = vec3(transform * vec4(aPos, 1.0));
+ Normal = mat3(transpose(inverse(transform))) * aNormal;
+ gl_Position = transform * vec4(aPos, 1.0);
+}
 )";
 
-// Fragment Shader source
+// Fragment Shader source code
 const char* fragmentShaderSource = R"(
-  #version 330 core
-  out vec4 FragColor;
-  void main() {
-      FragColor = vec4(1.0, 0.5, 0.2, 1.0); // Orange color
-  }
+#version 330 core
+out vec4 FragColor;
+
+in vec3 FragPos;
+in vec3 Normal;
+
+uniform vec3 lightPos;
+uniform vec3 viewPos;
+uniform vec3 lightColor;
+uniform vec3 objectColor;
+
+void main() {
+ // Ambient
+ float ambientStrength = 0.1;
+ vec3 ambient = ambientStrength * lightColor;
+
+ // Diffuse
+ vec3 norm = normalize(Normal);
+ vec3 lightDir = normalize(lightPos - FragPos);
+ float diff = max(dot(norm, lightDir), 0.0);
+ vec3 diffuse = diff * lightColor;
+
+ // Specular
+ float specularStrength = 0.5;
+ vec3 viewDir = normalize(viewPos - FragPos);
+ vec3 reflectDir = reflect(-lightDir, norm);
+ float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+ vec3 specular = specularStrength * spec * lightColor;
+
+ vec3 result = (ambient + diffuse + specular) * objectColor;
+ FragColor = vec4(result, 1.0);
+}
 )";
 
-// Function to compile shader and check for errors
-GLuint compileShader(GLenum type, const char* source) {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, nullptr);
-    glCompileShader(shader);
+// Function to create a transformation matrix for orthogonal rotation
+void createTransformationMatrix(float* transform, float angleX, float angleY, float angleZ) {
+   // Rotation matrices for X, Y, and Z axes
+   float cosX = cos(angleX), sinX = sin(angleX);
+   float cosY = cos(angleY), sinY = sin(angleY);
+   float cosZ = cos(angleZ), sinZ = sin(angleZ);
 
-    // Check for shader compile errors
-    int success;
-    char infoLog[512];
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(shader, 512, nullptr, infoLog);
-        std::cerr << "ERROR::SHADER::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-    return shader;
-}
+   // Combine the rotation matrices for all three axes
+   float rotX[16] = {
+       1,    0,     0,    0,
+       0, cosX, -sinX, 0,
+       0, sinX, cosX,  0,
+       0,    0,     0,    1
+   };
 
-// Function to plot the points of the ellipse
-void plotEllipsePoints(float xc, float yc, float x, float y, std::vector<float>& vertices) {
-    // Normalize coordinates to the range [-1, 1]
-    vertices.push_back((xc + x) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc + y) / SCREEN_HEIGHT * 2 - 1);
+   float rotY[16] = {
+       cosY,  0, sinY, 0,
+          0,  1,    0, 0,
+      -sinY,  0, cosY, 0,
+          0,  0,    0, 1
+   };
 
-    vertices.push_back((xc - x) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc + y) / SCREEN_HEIGHT * 2 - 1);
+   float rotZ[16] = {
+       cosZ, -sinZ, 0, 0,
+       sinZ, cosZ,  0, 0,
+          0,    0,  1, 0,
+          0,    0,  0, 1
+   };
 
-    vertices.push_back((xc + x) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc - y) / SCREEN_HEIGHT * 2 - 1);
+   // Identity matrix for the final transformation
+   for (int i = 0; i < 16; ++i)
+       transform[i] = (i % 5 == 0) ? 1.0f : 0.0f;
 
-    vertices.push_back((xc - x) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc - y) / SCREEN_HEIGHT * 2 - 1);
-}
+   // Multiply rotZ * rotY * rotX to get the final transformation matrix
+   for (int i = 0; i < 16; i += 4) {
+       for (int j = 0; j < 4; ++j) {
+           transform[i + j] = 0.0f;
+           for (int k = 0; k < 4; ++k) {
+               transform[i + j] += rotZ[i + k] * rotY[k * 4 + j];
+           }
+       }
+   }
 
-// Function to plot the circle points using Midpoint Circle Algorithm
-void plotCirclePoints(float xc, float yc, float x, float y, std::vector<float>& vertices) {
-    // Normalize coordinates to the range [-1, 1]
-    vertices.push_back((xc + x) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc + y) / SCREEN_HEIGHT * 2 - 1);
+   float temp[16];
+   for (int i = 0; i < 16; i += 4) {
+       for (int j = 0; j < 4; ++j) {
+           temp[i + j] = 0.0f;
+           for (int k = 0; k < 4; ++k) {
+               temp[i + j] += transform[i + k] * rotX[k * 4 + j];
+           }
+       }
+   }
 
-    vertices.push_back((xc - x) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc + y) / SCREEN_HEIGHT * 2 - 1);
-
-    vertices.push_back((xc + x) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc - y) / SCREEN_HEIGHT * 2 - 1);
-
-    vertices.push_back((xc - x) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc - y) / SCREEN_HEIGHT * 2 - 1);
-
-    vertices.push_back((xc + y) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc + x) / SCREEN_HEIGHT * 2 - 1);
-
-    vertices.push_back((xc - y) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc + x) / SCREEN_HEIGHT * 2 - 1);
-
-    vertices.push_back((xc + y) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc - x) / SCREEN_HEIGHT * 2 - 1);
-
-    vertices.push_back((xc - y) / SCREEN_WIDTH * 2 - 1);
-    vertices.push_back((yc - x) / SCREEN_HEIGHT * 2 - 1);
-}
-
-// Function to generate the ellipse points using Midpoint Ellipse Algorithm
-void generateEllipse(float xc, float yc, float rx, float ry, std::vector<float>& vertices) {
-    float x = 0;
-    float y = ry;
-    float rx2 = rx * rx;
-    float ry2 = ry * ry;
-    float tworx2 = 2 * rx2;
-    float twory2 = 2 * ry2;
-    float p = ry2 - (rx2 * ry) + (0.25 * rx2);
-    float px = 0;
-    float py = tworx2 * y;
-
-    // Region 1
-    while (px < py) {
-        plotEllipsePoints(xc, yc, x, y, vertices);
-        x++;
-        px += twory2;
-        if (p < 0) {
-            p += ry2 + px;
-        }
-        else {
-            y--;
-            py -= tworx2;
-            p += ry2 + px - py;
-        }
-    }
-
-    // Region 2
-    p = ry2 * (x + 0.5f) * (x + 0.5f) + rx2 * (y - 1) * (y - 1) - rx2 * ry2;
-    while (y > 0) {
-        plotEllipsePoints(xc, yc, x, y, vertices);
-        y--;
-        py -= tworx2;
-        if (p > 0) {
-            p += rx2 - py;
-        }
-        else {
-            x++;
-            px += twory2;
-            p += rx2 - py + px;
-        }
-    }
-}
-
-// Function to generate circle points using Midpoint Circle Algorithm
-void generateCircle(float xc, float yc, float radius, std::vector<float>& vertices) {
-    int x = 0;
-    int y = radius;
-    int p = 1 - radius;
-
-    // Plot initial points
-    plotCirclePoints(xc, yc, x, y, vertices);
-
-    while (x < y) {
-        x++;
-        if (p < 0) {
-            p += 2 * x + 1;
-        }
-        else {
-            y--;
-            p += 2 * (x - y) + 1;
-        }
-        plotCirclePoints(xc, yc, x, y, vertices);
-    }
-}
-
-// Global variables for mouse control and sinusoidal animation
-bool isDragging = false;
-bool animate = false;  // For sinusoidal animation
-double startX, startY;
-float animTime = 0.0f; // For sinusoidal animation time
-float animSpeed = 0.0005f; // Speed of the sinusoidal deformation
-
-// Mouse callback for clicking and dragging
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        if (action == GLFW_PRESS) {
-            isDragging = true;
-            glfwGetCursorPos(window, &startX, &startY);
-        }
-        else if (action == GLFW_RELEASE) {
-            isDragging = false;
-        }
-    }
-
-    // Toggle animation with right mouse button
-    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
-        animate = !animate;  // Toggle animation state
-    }
-}
-
-// Mouse callback for dragging to resize ellipse
-void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
-    if (isDragging) {
-        double deltaX = xpos - startX;
-        double deltaY = ypos - startY;
-
-        rx = initialRx + deltaX;
-        ry = initialRy - deltaY; // Invert Y axis since OpenGL's Y increases upwards
-        if (rx < 1) rx = 1; // Prevent shrinking too much
-        if (ry < 1) ry = 1;
-    }
-}
-
-void render(GLFWwindow* window, GLuint shaderProgram, GLuint VAO, GLuint VBO) {
-    // Get the window size to adjust the viewports
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
-
-    float currentFrame = glfwGetTime();
-    static float lastFrame = 0.0f;
-    float deltaTime = currentFrame - lastFrame;
-    lastFrame = currentFrame;
-
-    // If the animation is enabled, update the ellipse with a sinusoidal function
-    if (animate) {
-        animTime += animSpeed * glfwGetTime();
-        rx = initialRx + 50 * std::sin(animTime);  // Sinusoidal deformation
-        ry = initialRy + 50 * std::cos(animTime);  // Sinusoidal deformation
-    }
-
-    // Generate updated ellipse vertices
-    std::vector<float> ellipseVertices;
-    generateEllipse(centerX, centerY, rx, ry, ellipseVertices);
-
-    // Set up VAO and VBO for ellipse
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, ellipseVertices.size() * sizeof(float), ellipseVertices.data(), GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-
-    // Clear the screen
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(shaderProgram);
-
-    // Draw ellipse
-    glViewport(0, 0, width / 2, height);
-    glDrawArrays(GL_POINTS, 0, ellipseVertices.size() / 2);
-
-    // Draw circle
-    std::vector<float> circleVertices;
-    generateCircle(centerX, centerY, std::min(rx, ry), circleVertices);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, circleVertices.size() * sizeof(float), circleVertices.data(), GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    // Set second viewport (right side of the screen)
-    glViewport(width / 2, 0, width / 2, height);
-    glDrawArrays(GL_POINTS, 0, circleVertices.size() / 2); // Use GL_POINTS for rendering the circle
-
-    glBindVertexArray(0);
-
-    // Swap the buffers after rendering both viewports
-    glfwSwapBuffers(window);
+   for (int i = 0; i < 16; ++i) {
+       transform[i] = temp[i];
+   }
 }
 
 int main() {
-    // Initialize GLFW
-    if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
-        return -1;
-    }
+   // Initialize GLFW
+   if (!glfwInit()) {
+       std::cerr << "Failed to initialize GLFW" << std::endl;
+       return -1;
+   }
 
-    // Create a GLFW window
-    GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Ellipse and Circle Animation", nullptr, nullptr);
-    if (!window) {
-        std::cerr << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
-        return -1;
-    }
+   // Set GLFW to use OpenGL 3.3
+   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    glfwMakeContextCurrent(window);
-    glfwSetMouseButtonCallback(window, mouse_button_callback);
-    glfwSetCursorPosCallback(window, cursor_position_callback);
+   // Create a windowed mode window and its OpenGL context
+   GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Rotating Cube with Lighting", NULL, NULL);
+   if (!window) {
+       std::cerr << "Failed to create GLFW window" << std::endl;
+       glfwTerminate();
+       return -1;
+   }
+   glfwMakeContextCurrent(window);
 
-    // Initialize GLAD
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        std::cerr << "Failed to initialize GLAD" << std::endl;
-        return -1;
-    }
+   // Load OpenGL functions using glad
+   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+       std::cerr << "Failed to initialize GLAD" << std::endl;
+       return -1;
+   }
 
-    // Compile shaders and link the program
-    GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
-    GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSource);
-    GLuint shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
+   // Set the viewport and callback for window resize
+   glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+   glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-    // Check for linking errors
-    int success;
-    char infoLog[512];
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success) {
-        glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
-        std::cerr << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-    }
+   // Build and compile the vertex shader
+   unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
+   glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+   glCompileShader(vertexShader);
 
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
+   // Check for shader compile errors
+   int success;
+   char infoLog[512];
+   glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+   if (!success) {
+       glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+       std::cerr << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+   }
 
-    // Setup VAO and VBO
-    GLuint VAO, VBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
+   // Build and compile the fragment shader
+   unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+   glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+   glCompileShader(fragmentShader);
 
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW); // Initialize with no data
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+   // Check for shader compile errors
+   glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+   if (!success) {
+       glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+       std::cerr << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
+   }
 
-    // Render loop
-    while (!glfwWindowShouldClose(window)) {
-        render(window, shaderProgram, VAO, VBO);
-        glfwPollEvents();
-    }
+   // Link shaders into a program
+   unsigned int shaderProgram = glCreateProgram();
+   glAttachShader(shaderProgram, vertexShader);
+   glAttachShader(shaderProgram, fragmentShader);
+   glLinkProgram(shaderProgram);
 
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-    glfwDestroyWindow(window);
-    glfwTerminate();
-    return 0;
+   // Check for linking errors
+   glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+   if (!success) {
+       glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+       std::cerr << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
+   }
+
+   // Clean up shaders as they're no longer needed
+   glDeleteShader(vertexShader);
+   glDeleteShader(fragmentShader);
+
+   // Set up vertex data and buffers
+   float vertices[] = {
+       // positions          // normals
+       -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+       -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+       -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+
+       -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+       -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+       -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+
+       -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+       -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+       -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+       -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+       -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+       -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+
+        0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+        0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+        0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+        0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+        0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+        0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+
+       -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+        0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+        0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+        0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+       -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+       -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+
+       -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+        0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+        0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+        0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+       -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+       -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+   };
+
+   unsigned int VAO, VBO;
+   glGenVertexArrays(1, &VAO);
+   glGenBuffers(1, &VBO);
+
+   // Bind VAO and VBO
+   glBindVertexArray(VAO);
+
+   glBindBuffer(GL_ARRAY_BUFFER, VBO);
+   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+   // Set vertex attribute pointers
+   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+   glEnableVertexAttribArray(0);
+
+   glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+   glEnableVertexAttribArray(1);
+
+   // Unbind the VBO and VAO
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+   glBindVertexArray(0);
+
+   // Enable depth testing
+   glEnable(GL_DEPTH_TEST);
+
+   // Render loop
+   while (!glfwWindowShouldClose(window)) {
+       // Input
+       processInput(window);
+
+       // Render
+       glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+       // Activate shader
+       glUseProgram(shaderProgram);
+
+       // Create transformation matrix
+       float transform[16];
+       float time = (float)glfwGetTime();
+       createTransformationMatrix(transform, time, time, time);
+
+       // Pass the transformation matrix to the shader
+       unsigned int transformLoc = glGetUniformLocation(shaderProgram, "transform");
+       glUniformMatrix4fv(transformLoc, 1, GL_FALSE, transform);
+
+       // Set lighting uniforms
+       glUniform3f(glGetUniformLocation(shaderProgram, "lightPos"), 1.2f, 1.0f, 2.0f); // Stationary light position
+       glUniform3f(glGetUniformLocation(shaderProgram, "viewPos"), 0.0f, 0.0f, 3.0f);  // Camera position
+       glUniform3f(glGetUniformLocation(shaderProgram, "lightColor"), 1.0f, 1.0f, 1.0f); // Light color
+       glUniform3f(glGetUniformLocation(shaderProgram, "objectColor"), 1.0f, 0.5f, 0.31f); // Object color
+
+       // Render the cube
+       glBindVertexArray(VAO);
+       glDrawArrays(GL_TRIANGLES, 0, 36);
+
+       // Swap buffers and poll IO events
+       glfwSwapBuffers(window);
+       glfwPollEvents();
+   }
+
+   // Clean up
+   glDeleteVertexArrays(1, &VAO);
+   glDeleteBuffers(1, &VBO);
+
+   glfwTerminate();
+   return 0;
+}
+
+// Process all input
+void processInput(GLFWwindow* window) {
+   if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+       glfwSetWindowShouldClose(window, true);
+}
+
+// GLFW: whenever the window size changed, this callback function executes
+void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+   glViewport(0, 0, width, height);
 }

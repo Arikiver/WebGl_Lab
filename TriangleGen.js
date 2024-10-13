@@ -1,4 +1,4 @@
-function drawTriangle() {
+window.onload = function() {
     // Get the WebGL context
     const canvas = document.getElementById('glCanvas');
     const gl = canvas.getContext('webgl');
@@ -11,27 +11,6 @@ function drawTriangle() {
         alert('Your browser does not support WebGL');
         return;
     }
-
-    // Get the input values
-    const x1 = parseFloat(document.getElementById('x1').value);
-    const y1 = parseFloat(document.getElementById('y1').value);
-    const x2 = parseFloat(document.getElementById('x2').value);
-    const y2 = parseFloat(document.getElementById('y2').value);
-    const x3 = parseFloat(document.getElementById('x3').value);
-    const y3 = parseFloat(document.getElementById('y3').value);
-    const r = parseFloat(document.getElementById('r').value) / 255;
-    const g = parseFloat(document.getElementById('g').value) / 255;
-    const b = parseFloat(document.getElementById('b').value) / 255;
-
-    // Define the vertices for the triangle
-    const vertices = new Float32Array([
-        x1, y1,
-        x2, y2,
-        x3, y3
-    ]);
-
-    // Create the color data
-    const colors = new Float32Array([r, g, b, 1.0]);
 
     // Create and compile shaders
     const vertexShaderSource = `
@@ -66,7 +45,6 @@ function drawTriangle() {
     // Create a buffer for the vertices
     const vertexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
 
     // Bind the vertex buffer to the shader
     const coord = gl.getAttribLocation(shaderProgram, "coordinates");
@@ -75,11 +53,40 @@ function drawTriangle() {
 
     // Set the color uniform
     const colorLocation = gl.getUniformLocation(shaderProgram, "color");
-    gl.uniform4fv(colorLocation, colors);
 
-    // Clear the canvas and draw the triangle
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear with black
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    window.drawTriangle = function() {
+        // Get the input values
+        const x1 = parseFloat(document.getElementById('x1').value) / 100;
+        const y1 = parseFloat(document.getElementById('y1').value) / 100;
+        const x2 = parseFloat(document.getElementById('x2').value) / 100;
+        const y2 = parseFloat(document.getElementById('y2').value) / 100;
+        const x3 = parseFloat(document.getElementById('x3').value) / 100;
+        const y3 = parseFloat(document.getElementById('y3').value) / 100;
+        const r = parseFloat(document.getElementById('r').value) / 255;
+        const g = parseFloat(document.getElementById('g').value) / 255;
+        const b = parseFloat(document.getElementById('b').value) / 255;
 
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-}
+        // Define the vertices for the triangle
+        const vertices = new Float32Array([
+            x1, y1,
+            x2, y2,
+            x3, y3
+        ]);
+
+        // Set the vertex data in the buffer
+        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+        // Set the color
+        gl.uniform4fv(colorLocation, [r, g, b, 1.0]);
+
+        // Draw the triangle
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+
+    // Function to clear the screen
+    window.clearScreen = function() {
+        // Clear the canvas
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);  // Clear with black
+        gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+};

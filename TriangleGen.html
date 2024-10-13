@@ -7,6 +7,7 @@
     <style>
         canvas {
             border: 1px solid black;
+            align-content: center;
         }
         body {
             font-family: Arial, sans-serif;
@@ -30,7 +31,7 @@
 </head>
 <body>
     <h1>Draw a Triangle with WebGL</h1>
-
+    <h5>(Input values for x and y in a 100 x 100 coordinate system, from -100 to +100)<br>(Input values for R,G,B in a (255,255,255) system)</h5>
     <div id="input-form">
         <div class="input-box">
             <label>X1:</label> <input type="number" id="x1" step="0.01">
@@ -51,6 +52,7 @@
         </div>
 
         <button onclick="drawTriangle()">Draw Triangle</button>
+        <button onclick="clearScreen()">Clear Screen</button>
     </div>
 
     <canvas id="glCanvas" width="500" height="500"></canvas>
