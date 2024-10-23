@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Block Shooter Game</title>
+    <style>
+        canvas {
+            border: 2px solid black;
+            display: block;
+            margin: 20px auto;
+            position: relative;
+        }
+        #game-ui {
+            text-align: center;
+            margin: 10px;
+            font-family: Arial, sans-serif;
+        }
+        #game-over {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 10px;
+            text-align: center;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+        }
+        #game-over h1 {
+            font-size: 48px;
+            margin: 0 0 20px 0;
+            color: #ff0000;
+        }
+        #game-over p {
+            font-size: 24px;
+            margin: 0;
+            color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-ui">
+        <div>Score: <span id="score">0</span></div>
+        <div>Lives: <span id="lives">3</span></div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="game-over">
+        <h1>GAME OVER</h1>
+        <p>Refresh the page to restart</p>
+    </div>
+    <script src="shoot.js"></script>
+</body>
+</html>

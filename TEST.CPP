@@ -1,323 +1,271 @@
-#include <glad/glad.h>
+#include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <iostream>
-#include <cmath>
 
-// Function prototypes
-void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void processInput(GLFWwindow* window);
-
-// Settings
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
-
-// Vertex Shader source code
+// Vertex and Fragment shaders remain the same
 const char* vertexShaderSource = R"(
-#version 330 core
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec3 aNormal;
-
-out vec3 FragPos;
-out vec3 Normal;
-
-uniform mat4 transform;
-
-void main() {
- FragPos = vec3(transform * vec4(aPos, 1.0));
- Normal = mat3(transpose(inverse(transform))) * aNormal;
- gl_Position = transform * vec4(aPos, 1.0);
-}
+    #version 330 core
+    layout (location = 0) in vec3 aPos;
+    uniform mat4 transform;
+    void main() {
+        gl_Position = transform * vec4(aPos, 1.0);
+    }
 )";
 
-// Fragment Shader source code
 const char* fragmentShaderSource = R"(
-#version 330 core
-out vec4 FragColor;
-
-in vec3 FragPos;
-in vec3 Normal;
-
-uniform vec3 lightPos;
-uniform vec3 viewPos;
-uniform vec3 lightColor;
-uniform vec3 objectColor;
-
-void main() {
- // Ambient
- float ambientStrength = 0.1;
- vec3 ambient = ambientStrength * lightColor;
-
- // Diffuse
- vec3 norm = normalize(Normal);
- vec3 lightDir = normalize(lightPos - FragPos);
- float diff = max(dot(norm, lightDir), 0.0);
- vec3 diffuse = diff * lightColor;
-
- // Specular
- float specularStrength = 0.5;
- vec3 viewDir = normalize(viewPos - FragPos);
- vec3 reflectDir = reflect(-lightDir, norm);
- float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
- vec3 specular = specularStrength * spec * lightColor;
-
- vec3 result = (ambient + diffuse + specular) * objectColor;
- FragColor = vec4(result, 1.0);
-}
+    #version 330 core
+    out vec4 FragColor;
+    void main() {
+        FragColor = vec4(1.0, 0.5, 0.2, 1.0);
+    }
 )";
 
-// Function to create a transformation matrix for orthogonal rotation
-void createTransformationMatrix(float* transform, float angleX, float angleY, float angleZ) {
-   // Rotation matrices for X, Y, and Z axes
-   float cosX = cos(angleX), sinX = sin(angleX);
-   float cosY = cos(angleY), sinY = sin(angleY);
-   float cosZ = cos(angleZ), sinZ = sin(angleZ);
+// Global variables
+GLuint VBO, VAO, shaderProgram;
+glm::mat4 transformMatrix = glm::mat4(1.0f);
+float scale = 1.0f;
+float translateX = 0.0f, translateY = 0.0f;
+float rotation = 0.0f;
+float shearX = 0.0f, shearY = 0.0f;
+bool isDragging = false;
+double lastX = 0.0, lastY = 0.0;
 
-   // Combine the rotation matrices for all three axes
-   float rotX[16] = {
-       1,    0,     0,    0,
-       0, cosX, -sinX, 0,
-       0, sinX, cosX,  0,
-       0,    0,     0,    1
-   };
+enum class TransformMode {
+    NONE,
+    SCALE,
+    TRANSLATE,
+    ROTATE,
+    SHEAR
+};
 
-   float rotY[16] = {
-       cosY,  0, sinY, 0,
-          0,  1,    0, 0,
-      -sinY,  0, cosY, 0,
-          0,  0,    0, 1
-   };
+TransformMode currentMode = TransformMode::NONE;
 
-   float rotZ[16] = {
-       cosZ, -sinZ, 0, 0,
-       sinZ, cosZ,  0, 0,
-          0,    0,  1, 0,
-          0,    0,  0, 1
-   };
+// Function to handle window resize
+void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    glViewport(0, 0, width, height);
+}
 
-   // Identity matrix for the final transformation
-   for (int i = 0; i < 16; ++i)
-       transform[i] = (i % 5 == 0) ? 1.0f : 0.0f;
+void initializeGL() {
+    // Triangle vertices
+    float triangleVertices[] = {
+        -0.2f, -0.2f, 0.0f,
+        0.2f, -0.2f, 0.0f,
+        0.0f, 0.2f, 0.0f
+    };
 
-   // Multiply rotZ * rotY * rotX to get the final transformation matrix
-   for (int i = 0; i < 16; i += 4) {
-       for (int j = 0; j < 4; ++j) {
-           transform[i + j] = 0.0f;
-           for (int k = 0; k < 4; ++k) {
-               transform[i + j] += rotZ[i + k] * rotY[k * 4 + j];
-           }
-       }
-   }
+    // Create and compile shaders
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glCompileShader(vertexShader);
 
-   float temp[16];
-   for (int i = 0; i < 16; i += 4) {
-       for (int j = 0; j < 4; ++j) {
-           temp[i + j] = 0.0f;
-           for (int k = 0; k < 4; ++k) {
-               temp[i + j] += transform[i + k] * rotX[k * 4 + j];
-           }
-       }
-   }
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+    glCompileShader(fragmentShader);
 
-   for (int i = 0; i < 16; ++i) {
-       transform[i] = temp[i];
-   }
+    // Create and link shader program
+    shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    // Create and set up vertex buffer and array objects
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVertices), triangleVertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+}
+
+void updateTransformMatrix() {
+    transformMatrix = glm::mat4(1.0f);
+    transformMatrix = glm::translate(transformMatrix, glm::vec3(translateX, translateY, 0.0f));
+    transformMatrix = glm::rotate(transformMatrix, glm::radians(rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+    transformMatrix = glm::scale(transformMatrix, glm::vec3(scale, scale, 1.0f));
+    
+    glm::mat4 shearMatrix(1.0f);
+    shearMatrix[0][1] = shearX;
+    shearMatrix[1][0] = shearY;
+    transformMatrix = transformMatrix * shearMatrix;
+}
+
+// Function to convert screen coordinates to OpenGL coordinates
+void screenToGL(GLFWwindow* window, double xpos, double ypos, float& x, float& y) {
+    int width, height;
+    glfwGetWindowSize(window, &width, &height);
+    x = (2.0f * xpos) / width - 1.0f;
+    y = 1.0f - (2.0f * ypos) / height;
+}
+
+void processInput(GLFWwindow* window) {
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+}
+
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+    // Check if mouse is over ImGui window
+    if (ImGui::GetIO().WantCaptureMouse)
+        return;
+
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == GLFW_PRESS) {
+            isDragging = true;
+            glfwGetCursorPos(window, &lastX, &lastY);
+        }
+        else if (action == GLFW_RELEASE) {
+            isDragging = false;
+        }
+    }
+}
+
+void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
+    if (!isDragging || ImGui::GetIO().WantCaptureMouse)
+        return;
+
+    float deltaX = (xpos - lastX) * 0.01f;
+    float deltaY = (lastY - ypos) * 0.01f; // Inverted for more intuitive control
+
+    switch (currentMode) {
+        case TransformMode::SCALE:
+            scale += deltaY;
+            scale = glm::max(0.1f, scale);
+            break;
+        case TransformMode::ROTATE:
+            rotation += deltaX * 100.0f;
+            break;
+        case TransformMode::SHEAR:
+            shearX += deltaX;
+            shearY += deltaY;
+            break;
+        case TransformMode::TRANSLATE:
+            translateX += deltaX;
+            translateY += deltaY;
+            break;
+        default:
+            break;
+    }
+
+    lastX = xpos;
+    lastY = ypos;
+    updateTransformMatrix();
 }
 
 int main() {
-   // Initialize GLFW
-   if (!glfwInit()) {
-       std::cerr << "Failed to initialize GLFW" << std::endl;
-       return -1;
-   }
+    if (!glfwInit()) {
+        std::cerr << "Failed to initialize GLFW" << std::endl;
+        return -1;
+    }
 
-   // Set GLFW to use OpenGL 3.3
-   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-   // Create a windowed mode window and its OpenGL context
-   GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Rotating Cube with Lighting", NULL, NULL);
-   if (!window) {
-       std::cerr << "Failed to create GLFW window" << std::endl;
-       glfwTerminate();
-       return -1;
-   }
-   glfwMakeContextCurrent(window);
+    GLFWwindow* window = glfwCreateWindow(800, 600, "OpenGL Transformations", NULL, NULL);
+    if (!window) {
+        std::cerr << "Failed to create GLFW window" << std::endl;
+        glfwTerminate();
+        return -1;
+    }
 
-   // Load OpenGL functions using glad
-   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-       std::cerr << "Failed to initialize GLAD" << std::endl;
-       return -1;
-   }
+    glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
+    glfwSetCursorPosCallback(window, cursor_position_callback);
 
-   // Set the viewport and callback for window resize
-   glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-   glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    if (glewInit() != GLEW_OK) {
+        std::cerr << "Failed to initialize GLEW" << std::endl;
+        return -1;
+    }
 
-   // Build and compile the vertex shader
-   unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-   glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-   glCompileShader(vertexShader);
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
+    ImGui::StyleColorsDark();
 
-   // Check for shader compile errors
-   int success;
-   char infoLog[512];
-   glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-   if (!success) {
-       glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-       std::cerr << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-   }
+    initializeGL();
 
-   // Build and compile the fragment shader
-   unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-   glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-   glCompileShader(fragmentShader);
+    while (!glfwWindowShouldClose(window)) {
+        processInput(window);
 
-   // Check for shader compile errors
-   glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-   if (!success) {
-       glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-       std::cerr << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-   }
+        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
 
-   // Link shaders into a program
-   unsigned int shaderProgram = glCreateProgram();
-   glAttachShader(shaderProgram, vertexShader);
-   glAttachShader(shaderProgram, fragmentShader);
-   glLinkProgram(shaderProgram);
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
 
-   // Check for linking errors
-   glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-   if (!success) {
-       glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-       std::cerr << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-   }
+        // Create ImGui window
+        ImGui::Begin("Transform Controls");
+        
+        // Radio buttons for transform mode
+        if (ImGui::RadioButton("None", currentMode == TransformMode::NONE))
+            currentMode = TransformMode::NONE;
+        if (ImGui::RadioButton("Scale (Drag)", currentMode == TransformMode::SCALE))
+            currentMode = TransformMode::SCALE;
+        if (ImGui::RadioButton("Rotate (Drag)", currentMode == TransformMode::ROTATE))
+            currentMode = TransformMode::ROTATE;
+        if (ImGui::RadioButton("Translate (Drag)", currentMode == TransformMode::TRANSLATE))
+            currentMode = TransformMode::TRANSLATE;
+        if (ImGui::RadioButton("Shear (Drag)", currentMode == TransformMode::SHEAR))
+            currentMode = TransformMode::SHEAR;
 
-   // Clean up shaders as they're no longer needed
-   glDeleteShader(vertexShader);
-   glDeleteShader(fragmentShader);
+        ImGui::Separator();
 
-   // Set up vertex data and buffers
-   float vertices[] = {
-       // positions          // normals
-       -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-       -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-       -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        // Manual controls
+        ImGui::Text("Manual Controls");
+        ImGui::DragFloat("Scale", &scale, 0.01f, 0.1f, 10.0f);
+        ImGui::DragFloat("Rotation", &rotation, 1.0f, 0.0f, 360.0f);
+        ImGui::DragFloat("Translate X", &translateX, 0.01f, -2.0f, 2.0f);
+        ImGui::DragFloat("Translate Y", &translateY, 0.01f, -2.0f, 2.0f);
+        ImGui::DragFloat("Shear X", &shearX, 0.01f, -2.0f, 2.0f);
+        ImGui::DragFloat("Shear Y", &shearY, 0.01f, -2.0f, 2.0f);
 
-       -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-       -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-       -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        if (ImGui::Button("Reset All")) {
+            scale = 1.0f;
+            rotation = 0.0f;
+            translateX = translateY = 0.0f;
+            shearX = shearY = 0.0f;
+        }
 
-       -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-       -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-       -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-       -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-       -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-       -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+        ImGui::End();
 
-        0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-        0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-        0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-        0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-        0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-        0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+        // Render triangle
+        updateTransformMatrix();
+        glUseProgram(shaderProgram);
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "transform"), 1, GL_FALSE, glm::value_ptr(transformMatrix));
+        
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
 
-       -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-        0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-        0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-       -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-       -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-       -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-        0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-        0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-       -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-       -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
-   };
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
 
-   unsigned int VAO, VBO;
-   glGenVertexArrays(1, &VAO);
-   glGenBuffers(1, &VBO);
+    // Cleanup
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
 
-   // Bind VAO and VBO
-   glBindVertexArray(VAO);
+    glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &VBO);
+    glDeleteProgram(shaderProgram);
 
-   glBindBuffer(GL_ARRAY_BUFFER, VBO);
-   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-   // Set vertex attribute pointers
-   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-   glEnableVertexAttribArray(0);
-
-   glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-   glEnableVertexAttribArray(1);
-
-   // Unbind the VBO and VAO
-   glBindBuffer(GL_ARRAY_BUFFER, 0);
-   glBindVertexArray(0);
-
-   // Enable depth testing
-   glEnable(GL_DEPTH_TEST);
-
-   // Render loop
-   while (!glfwWindowShouldClose(window)) {
-       // Input
-       processInput(window);
-
-       // Render
-       glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-       // Activate shader
-       glUseProgram(shaderProgram);
-
-       // Create transformation matrix
-       float transform[16];
-       float time = (float)glfwGetTime();
-       createTransformationMatrix(transform, time, time, time);
-
-       // Pass the transformation matrix to the shader
-       unsigned int transformLoc = glGetUniformLocation(shaderProgram, "transform");
-       glUniformMatrix4fv(transformLoc, 1, GL_FALSE, transform);
-
-       // Set lighting uniforms
-       glUniform3f(glGetUniformLocation(shaderProgram, "lightPos"), 1.2f, 1.0f, 2.0f); // Stationary light position
-       glUniform3f(glGetUniformLocation(shaderProgram, "viewPos"), 0.0f, 0.0f, 3.0f);  // Camera position
-       glUniform3f(glGetUniformLocation(shaderProgram, "lightColor"), 1.0f, 1.0f, 1.0f); // Light color
-       glUniform3f(glGetUniformLocation(shaderProgram, "objectColor"), 1.0f, 0.5f, 0.31f); // Object color
-
-       // Render the cube
-       glBindVertexArray(VAO);
-       glDrawArrays(GL_TRIANGLES, 0, 36);
-
-       // Swap buffers and poll IO events
-       glfwSwapBuffers(window);
-       glfwPollEvents();
-   }
-
-   // Clean up
-   glDeleteVertexArrays(1, &VAO);
-   glDeleteBuffers(1, &VBO);
-
-   glfwTerminate();
-   return 0;
-}
-
-// Process all input
-void processInput(GLFWwindow* window) {
-   if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-       glfwSetWindowShouldClose(window, true);
-}
-
-// GLFW: whenever the window size changed, this callback function executes
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-   glViewport(0, 0, width, height);
+    glfwTerminate();
+    return 0;
 }

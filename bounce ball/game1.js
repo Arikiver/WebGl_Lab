@@ -131,11 +131,20 @@ function drawScene() {
     gl.uniformMatrix4fv(programInfo.uniformLocations.modelViewMatrix, false, modelViewMatrix);
     gl.uniform4fv(programInfo.uniformLocations.color, [1.0, 0.0, 0.0, 1.0]);
 
+    // Create and bind a buffer for the ball's position
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    const positions = [0, 0];  // Point at origin, we move with modelViewMatrix
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+    // Enable the attribute and bind it to the buffer
     gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
     gl.vertexAttribPointer(programInfo.attribLocations.vertexPosition, 2, gl.FLOAT, false, 0, 0);
 
+    // Draw the point (ball)
     gl.drawArrays(gl.POINTS, 0, 1);
 }
+
 
 function updateBallPosition() {
     ballPosition[0] += ballVelocity[0];
