@@ -3,53 +3,360 @@
 <head>
     <title>Block Shooter Game</title>
     <style>
-        canvas {
-            border: 2px solid black;
-            display: block;
-            margin: 20px auto;
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #0a0a0a;
+            font-family: 'Arial', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+        }
+
+        .volume-control {
+            margin-bottom: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            padding: 10px 20px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .volume-control input[type="range"] {
+            -webkit-appearance: none;
+            width: 150px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .volume-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 15px;
+            height: 15px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .volume-control input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        /* Game container */
+        .game-container {
             position: relative;
+            margin: 20px auto;
+            width: 800px;
         }
-        #game-ui {
+
+        /* Canvas styling */
+        #gameCanvas {
+            border: 3px solid rgba(51, 110, 255, 0.5);
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(51, 110, 255, 0.3);
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        /* Top HUD */
+        .game-hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+            pointer-events: none;
+        }
+
+        /* Score and Level display */
+        .stats-container {
+            display: flex;
+            gap: 20px;
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stat-box .icon {
+            font-size: 24px;
+            opacity: 0.8;
+        }
+
+        .stat-box .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .stat-box .label {
+            font-size: 12px;
+            opacity: 0.7;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+
+        /* Lives display */
+        .lives-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Updated heart styling to add spacing */
+        .heart {
+            width: 30px;
+            height: 30px;
+            background: red;
+            position: relative;
+            transform: rotate(45deg);
+            animation: pulse 1.5s infinite;
+            margin-right: 20px; /* Add spacing between hearts */
+        }
+
+        .heart::before,
+        .heart::after {
+            content: '';
+            width: 30px;
+            height: 30px;
+            background: red;
+            border-radius: 50%;
+            position: absolute;
+        }
+
+        .heart::before {
+            left: -15px;
+        }
+
+        .heart::after {
+            top: -15px;
+        }
+
+        @keyframes pulse {
+            0% { transform: rotate(45deg) scale(1); }
+            50% { transform: rotate(45deg) scale(1.1); }
+            100% { transform: rotate(45deg) scale(1); }
+        }
+
+        /* Controls display */
+        .controls-guide {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            padding: 15px 25px;
+            border-radius: 8px;
             text-align: center;
-            margin: 10px;
-            font-family: Arial, sans-serif;
+            animation: fadeOut 1s 5s forwards;
         }
+
+        .controls-guide h3 {
+            margin-bottom: 10px;
+            color: #fff;
+        }
+
+        .key {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin: 0 5px;
+            font-family: monospace;
+        }
+
+        @keyframes fadeOut {
+            to { opacity: 0; visibility: hidden; }
+        }
+
+        /* Game Over screen */
         #game-over {
             display: none;
-            position: fixed;
+            position: absolute; /* Changed from fixed to absolute */
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            border: 2px solid rgba(255, 0, 0, 0.3);
+            z-index: 1000;
+        }
+
+        @keyframes gameOverPulse {
+            0% { box-shadow: 0 0 20px rgba(255, 0, 0, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(255, 0, 0, 0.5); }
+            100% { box-shadow: 0 0 20px rgba(255, 0, 0, 0.3); }
+        }
+
+        #game-over h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #ff0000;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+        }
+
+        #game-over p {
+            font-size: 24px;
+            color: #fff;
+            margin-bottom: 30px;
+        }
+
+        .restart-btn {
+            background: #ff0000;
             color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .restart-btn:hover {
+            background: #ff3333;
+            transform: scale(1.05);
+        }
+
+        /* Level Up notification */
+        .level-up {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(51, 110, 255, 0.9);
             padding: 20px 40px;
             border-radius: 10px;
             text-align: center;
-            font-family: Arial, sans-serif;
-            z-index: 1000;
+            animation: levelUpAnim 2s ease-in-out forwards;
+            pointer-events: none;
         }
-        #game-over h1 {
-            font-size: 48px;
-            margin: 0 0 20px 0;
-            color: #ff0000;
+
+        @keyframes levelUpAnim {
+            0% { opacity: 0; transform: translate(-50%, -30%); }
+            20% { opacity: 1; transform: translate(-50%, -50%); }
+            80% { opacity: 1; transform: translate(-50%, -50%); }
+            100% { opacity: 0; transform: translate(-50%, -70%); }
         }
-        #game-over p {
-            font-size: 24px;
-            margin: 0;
-            color: #ffffff;
+
+        .level-up h2 {
+            font-size: 36px;
+            margin-bottom: 10px;
         }
+
+        /* Volume control styling */
+        
     </style>
 </head>
 <body>
-    <div id="game-ui">
-        <div>Score: <span id="score">0</span></div>
-        <div>Lives: <span id="lives">3</span></div>
+    <!-- Volume Control moved outside game container -->
+    <div class="volume-control">
+        🔊 <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="0.5">
     </div>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <div class="game-container">
+        <!-- Game HUD -->
+        <div class="game-hud">
+            <div class="stats-container">
+                <div class="stat-box">
+                    <div class="icon">🏆</div>
+                    <div>
+                        <div id="score" class="value">0</div>
+                        <div class="label">Score</div>
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="icon">🛡️</div>
+                    <div>
+                        <div id="level" class="value">1</div>
+                        <div class="label">Level</div>
+                    </div>
+                </div>
+            </div>
+            <div class="lives-container">
+                <div class="heart"></div>
+                <div class="heart"></div>
+                <div class="heart"></div>
+            </div>
+        </div>
+
+        <!-- Game Canvas -->
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+        <!-- Controls Guide -->
+        <div class="controls-guide">
+            <h3>Controls</h3>
+            <div>
+                <span class="key">←</span>
+                <span class="key">→</span>
+                Move
+                <span class="key">SPACE</span>
+                Shoot
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
     <div id="game-over">
         <h1>GAME OVER</h1>
-        <p>Refresh the page to restart</p>
+        <p>Final Score: <span id="final-score">0</span></p>
+        <button class="restart-btn" onclick="window.location.reload()">Play Again</button>
     </div>
+
+    <!-- Level Up Notification - Added dynamically when needed -->
+    <script>
+        // Function to show level up notification
+        function showLevelUp(level) {
+            const levelUp = document.createElement('div');
+            levelUp.className = 'level-up';
+            levelUp.innerHTML = `
+                <h2>Level ${level}!</h2>
+                <p>Enemies are getting stronger...</p>
+            `;
+            document.querySelector('.game-container').appendChild(levelUp);
+            setTimeout(() => levelUp.remove(), 2000);
+        }
+
+        // Function to update lives display
+        function updateLives(lives) {
+            const container = document.querySelector('.lives-container');
+            if (container) {
+                container.innerHTML = '';
+                for (let i = 0; i < lives; i++) {
+                    const heart = document.createElement('div');
+                    heart.className = 'heart';
+                    container.appendChild(heart);
+                }
+            }
+        }
+        // Connect volume slider to audio manager
+        document.getElementById('volumeSlider').addEventListener('input', function(e) {
+            window.audioManager?.setMasterVolume(parseFloat(e.target.value));
+        });
+    </script>
+
     <script src="shoot.js"></script>
 </body>
 </html>

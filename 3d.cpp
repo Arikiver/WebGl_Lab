@@ -9,28 +9,6 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <stdexcept>
-
-// Error checking function
-void checkGLError(const char* operation) {
-    GLenum error;
-    while ((error = glGetError()) != GL_NO_ERROR) {
-        std::string errorStr;
-        switch (error) {
-        case GL_INVALID_ENUM:       errorStr = "GL_INVALID_ENUM"; break;
-        case GL_INVALID_VALUE:      errorStr = "GL_INVALID_VALUE"; break;
-        case GL_INVALID_OPERATION:  errorStr = "GL_INVALID_OPERATION"; break;
-        case GL_OUT_OF_MEMORY:      errorStr = "GL_OUT_OF_MEMORY"; break;
-        default:                    errorStr = "UNKNOWN"; break;
-        }
-        std::cerr << "OpenGL error after " << operation << ": " << errorStr << " (" << error << ")" << std::endl;
-    }
-}
-
-// GLFW error callback
-void error_callback(int error, const char* description) {
-    std::cerr << "GLFW Error " << error << ": " << description << std::endl;
-}
 
 // Shader sources
 const char* vertexShaderSource = R"(
@@ -143,53 +121,21 @@ public:
     }
 
     void setupShaders() {
-        // Create vertex shader
         GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-        if (vertexShader == 0) {
-            throw std::runtime_error("Failed to create vertex shader");
-        }
-
         glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
         glCompileShader(vertexShader);
 
-        // Check compilation
-        GLint success;
-        GLchar infoLog[512];
-        glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-            glDeleteShader(vertexShader);
-            throw std::runtime_error(std::string("Vertex shader compilation failed: ") + infoLog);
-        }
-
-        // Create fragment shader
         GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
         glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
         glCompileShader(fragmentShader);
 
-        // Check fragment shader compilation
-        glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-            std::cerr << "Fragment shader compilation failed: " << infoLog << std::endl;
-        }
-
-        // Create shader program
         shaderProgram = glCreateProgram();
         glAttachShader(shaderProgram, vertexShader);
         glAttachShader(shaderProgram, fragmentShader);
         glLinkProgram(shaderProgram);
 
-        // Check program linking
-        glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-        if (!success) {
-            glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-            std::cerr << "Shader program linking failed: " << infoLog << std::endl;
-        }
-
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
-        checkGLError("Shader setup");
     }
 
     void setupShapes() {
@@ -291,20 +237,12 @@ private:
     Shape currentShape;
     GLFWwindow* window;
 
-
     // Default values for reset
     const glm::vec3 DEFAULT_TRANSLATION{ 0.0f };
     const glm::vec3 DEFAULT_ROTATION{ 0.0f };
     const glm::vec3 DEFAULT_SCALE{ 1.0f };
     const glm::vec3 DEFAULT_SHEAR{ 0.0f };
     const glm::vec3 DEFAULT_CAMERA_POS{ 0.0f, 0.0f, 3.0f };
-    float cameraDistance = 3.0f;
-    float cameraPhi = 0.0f;   // Azimuthal angle
-    float cameraTheta = 90.0f; // Polar angle
-    bool isDragging = false;
-    double lastMouseX = 0.0;
-    double lastMouseY = 0.0;
-    const float MOUSE_SENSITIVITY = 0.3f;
 
     // Transformation parameters
     glm::vec3 translation{ 0.0f };
@@ -323,34 +261,10 @@ private:
 
 public:
     Renderer(GLFWwindow* win) : window(win) {
-        // Initialize these values first
-        isDragging = false;
-        lastMouseX = 0.0;
-        lastMouseY = 0.0;
-
-        // Get primary monitor before any other operations
         primaryMonitor = glfwGetPrimaryMonitor();
-
-        // Setup initial window position and size
-        glfwGetWindowPos(window, &windowed_x, &windowed_y);
-        glfwGetWindowSize(window, &windowed_width, &windowed_height);
-
-        // Initialize transformation values
-        translation = DEFAULT_TRANSLATION;
-        rotation = DEFAULT_ROTATION;
-        scale = DEFAULT_SCALE;
-        shear = DEFAULT_SHEAR;
-        cameraPos = DEFAULT_CAMERA_POS;
-
-        // Setup OpenGL components
         setupShaders();
         setupBuffers();
         updateProjection();
-
-        // Set up mouse callback after everything else is initialized
-        glfwSetWindowUserPointer(window, this);
-        glfwSetMouseButtonCallback(window, mouse_button_callback);
-        glfwSetCursorPosCallback(window, mouse_position_callback);
     }
 
     void setShape(Shape::Type shapeType) {
@@ -375,12 +289,6 @@ public:
         scale = DEFAULT_SCALE;
         shear = DEFAULT_SHEAR;
         cameraPos = DEFAULT_CAMERA_POS;
-        // Reset camera parameters
-        cameraDistance = 3.0f;
-        cameraPhi = 0.0f;
-        cameraTheta = 90.0f;
-        updateCameraPosition();
-
         reflection[0] = reflection[1] = reflection[2] = false;
     }
 
@@ -396,64 +304,6 @@ public:
         }
         isFullscreen = !isFullscreen;
         updateProjection();
-    }
-
-
-
-    // Static callbacks to forward to instance methods
-    static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-        Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
-        renderer->handleMouseButton(button, action, mods);
-    }
-
-    static void mouse_position_callback(GLFWwindow* window, double xpos, double ypos) {
-        Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
-        renderer->handleMouseMove(xpos, ypos);
-    }
-
-    void handleMouseButton(int button, int action, int mods) {
-        if (ImGui::GetIO().WantCaptureMouse) return;
-
-        if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            if (action == GLFW_PRESS) {
-                isDragging = true;
-                glfwGetCursorPos(window, &lastMouseX, &lastMouseY);
-            }
-            else if (action == GLFW_RELEASE) {
-                isDragging = false;
-            }
-        }
-    }
-
-    void handleMouseMove(double xpos, double ypos) {
-        if (ImGui::GetIO().WantCaptureMouse) return;
-
-        if (!isDragging) return;
-
-        // Calculate the change in mouse position
-        float deltaX = static_cast<float>(xpos - lastMouseX);
-        float deltaY = static_cast<float>(ypos - lastMouseY);
-
-        // Update camera angles
-        cameraPhi += deltaX * MOUSE_SENSITIVITY;
-        cameraTheta = glm::clamp(cameraTheta - deltaY * MOUSE_SENSITIVITY, 1.0f, 179.0f);
-
-        // Update last mouse position
-        lastMouseX = xpos;
-        lastMouseY = ypos;
-
-        // Update camera position based on spherical coordinates
-        updateCameraPosition();
-    }
-
-    void updateCameraPosition() {
-        // Convert spherical coordinates to Cartesian coordinates
-        float phiRad = glm::radians(cameraPhi);
-        float thetaRad = glm::radians(cameraTheta);
-
-        cameraPos.x = cameraDistance * sin(thetaRad) * cos(phiRad);
-        cameraPos.y = cameraDistance * cos(thetaRad);
-        cameraPos.z = cameraDistance * sin(thetaRad) * sin(phiRad);
     }
 
     void setupShaders() {
@@ -497,15 +347,9 @@ public:
         glEnableVertexAttribArray(1);
     }
 
+
+
     void renderUI() {
-        // Set window flags to ensure it's interactive
-        ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
-        ImGui::Begin("Transformations", nullptr, ImGuiWindowFlags_NoCollapse);
-
-        // Make sure sliders are active and responsive
-        ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.65f);
-
         // Set up ImGui window for transformations
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
@@ -559,14 +403,6 @@ public:
 
         ImGui::Separator();
 
-        // Add camera distance control
-        ImGui::Text("Camera");
-        if (ImGui::SliderFloat("Distance", &cameraDistance, 0.1f, 10.0f)) {
-            updateCameraPosition();
-        }
-
-        ImGui::Separator();
-
         // Reset and fullscreen buttons
         if (ImGui::Button("Reset Transformations")) {
             resetTransformations();
@@ -576,7 +412,6 @@ public:
             toggleFullscreen();
         }
 
-        ImGui::PopItemWidth();
         ImGui::End();
     }
 
@@ -701,26 +536,10 @@ int main() {
             // Check if a shape has been selected
             int selectedShape = shapeSelector.getSelectedShape();
             if (selectedShape != -1) {
-                // Delete old renderer if it exists
-                if (renderer) {
-                    renderer->cleanup();
-                    delete renderer;
-                }
-
-                // Create new renderer
-                try {
-                    renderer = new Renderer(window);
-                    if (renderer) {
-                        renderer->setShape(static_cast<Shape::Type>(selectedShape));
-                        introScreen = false;
-                    }
-                    else {
-                        std::cerr << "Failed to create renderer" << std::endl;
-                    }
-                }
-                catch (const std::exception& e) {
-                    std::cerr << "Error creating renderer: " << e.what() << std::endl;
-                }
+                // Create renderer with selected shape
+                renderer = new Renderer(window);
+                renderer->setShape(static_cast<Shape::Type>(selectedShape));
+                introScreen = false;
             }
         }
         else {
@@ -742,7 +561,6 @@ int main() {
     if (renderer) {
         renderer->cleanup();
         delete renderer;
-        renderer = nullptr;
     }
     shapeSelector.cleanup();
 
@@ -750,8 +568,6 @@ int main() {
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
-    glfwDestroyWindow(window);
     glfwTerminate();
-
     return 0;
 }

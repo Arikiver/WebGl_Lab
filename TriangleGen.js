@@ -15,15 +15,18 @@ window.onload = function() {
     // Create and compile shaders
     const vertexShaderSource = `
         attribute vec2 coordinates;
+        attribute vec4 aColor;
+        varying vec4 vColor;
         void main(void) {
             gl_Position = vec4(coordinates, 0.0, 1.0);
+            vColor = aColor;
         }
     `;
     const fragmentShaderSource = `
         precision mediump float;
-        uniform vec4 color;
+        varying vec4 vColor;
         void main(void) {
-            gl_FragColor = color;
+            gl_FragColor = vColor;
         }
     `;
 
@@ -42,17 +45,24 @@ window.onload = function() {
     gl.linkProgram(shaderProgram);
     gl.useProgram(shaderProgram);
 
-    // Create a buffer for the vertices
+    // Create buffers for the vertices and colors
     const vertexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+    const colorBuffer = gl.createBuffer();
 
-    // Bind the vertex buffer to the shader
+    // Get attribute locations
     const coord = gl.getAttribLocation(shaderProgram, "coordinates");
-    gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
-    gl.enableVertexAttribArray(coord);
+    const colorAttribute = gl.getAttribLocation(shaderProgram, "aColor");
 
-    // Set the color uniform
-    const colorLocation = gl.getUniformLocation(shaderProgram, "color");
+    // Enable vertex attributes
+    gl.enableVertexAttribArray(coord);
+    gl.enableVertexAttribArray(colorAttribute);
+
+    // Array to store all triangles
+    let triangles = [];
+
+    // Clear the canvas initially
+    gl.clearColor(1.0, 1.0, 1.0, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
     window.drawTriangle = function() {
         // Get the input values
@@ -66,27 +76,50 @@ window.onload = function() {
         const g = parseFloat(document.getElementById('g').value) / 255;
         const b = parseFloat(document.getElementById('b').value) / 255;
 
-        // Define the vertices for the triangle
-        const vertices = new Float32Array([
-            x1, y1,
-            x2, y2,
-            x3, y3
-        ]);
+        // Store the new triangle data
+        triangles.push({
+            vertices: [x1, y1, x2, y2, x3, y3],
+            color: [r, g, b, 1.0]
+        });
 
-        // Set the vertex data in the buffer
-        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+        // Create arrays for all vertices and colors
+        let allVertices = [];
+        let allColors = [];
 
-        // Set the color
-        gl.uniform4fv(colorLocation, [r, g, b, 1.0]);
+        // Populate the arrays with all triangles
+        triangles.forEach(triangle => {
+            allVertices.push(...triangle.vertices);
+            // Each vertex needs its own color
+            for (let i = 0; i < 3; i++) {
+                allColors.push(...triangle.color);
+            }
+        });
 
-        // Draw the triangle
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        // Convert to Float32Array
+        const verticesArray = new Float32Array(allVertices);
+        const colorsArray = new Float32Array(allColors);
+
+        // Bind and fill vertex buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, verticesArray, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
+
+        // Bind and fill color buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, colorsArray, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(colorAttribute, 4, gl.FLOAT, false, 0, 0);
+
+        // Clear canvas and draw all triangles
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLES, 0, triangles.length * 3);
     }
 
     // Function to clear the screen
     window.clearScreen = function() {
+        // Clear the triangles array
+        triangles = [];
         // Clear the canvas
-        gl.clearColor(1.0, 1.0, 1.0, 1.0);  // Clear with black
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT);
     }
 };
