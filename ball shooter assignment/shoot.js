@@ -419,7 +419,9 @@ class AudioManager {
             background: new Audio('music/background.mp3'),
             shoot: new Audio('sounds/shoot.mp3'),
             hit: new Audio('sounds/hit.mp3'),
-            gameOver: new Audio('sounds/gameover.mp3')
+            gameOver: new Audio('sounds/gameover.mp3'),
+            levelUp: new Audio('sounds/levelup.mp3'),
+            blockDestroy: new Audio('sounds/blockdestroy.mp3')
         };
 
         // Configure background music
@@ -438,18 +440,17 @@ class AudioManager {
         });
     }
 
-    setMasterVolume(volume) {
-        this.masterVolume = Math.max(0, Math.min(1, volume)); // Clamp between 0 and 1
-        
-        Object.values(this.sounds).forEach(audio => {
-            try {
-                audio.volume = this.masterVolume;
-            } catch (error) {
-                console.warn('Error setting volume:', error);
-            }
-        });
+    playLevelUp() {
+        this.sounds.levelUp.currentTime = 0; // Reset sound
+        this.sounds.levelUp.play().catch(e => console.warn('Error playing level up:', e));
     }
 
+    playBlockDestroy() {
+        const blockDestroy = this.sounds.blockDestroy.cloneNode();
+        blockDestroy.volume = this.masterVolume;
+        blockDestroy.play().catch(e => console.warn('Error playing block destroy:', e));
+    }
+    
     // Add these new methods to play sounds
     playBackground() {
         try {
@@ -551,18 +552,6 @@ function showGameOver() {
     audioManager.playGameOver();
 }
 
-function addVolumeControl() {
-    // Use the existing volume control from HTML instead of creating new one
-    const volumeSlider = document.getElementById('volumeSlider');
-    if (volumeSlider) {
-        volumeSlider.addEventListener('input', (e) => {
-            if (window.audioManager) {
-                window.audioManager.setMasterVolume(parseFloat(e.target.value));
-            }
-        });
-    }
-}
-
 function update() {
     if (gameOver) return;
 
@@ -618,6 +607,9 @@ function update() {
                 blocks[i].hitPoints--;
                 projectiles.splice(j, 1);
                 if (blocks[i].hitPoints <= 0) {
+                    if (window.audioManager) {
+                        window.audioManager.playBlockDestroy();
+                    }
                     blocks.splice(i, 1);
                     score += 10;
                     // Update score display
@@ -654,6 +646,9 @@ function update() {
 
 // Add level up display
 function displayLevelUp() {
+    if (window.audioManager) {
+        window.audioManager.playLevelUp();
+    }
     const levelUpDiv = document.createElement('div');
     levelUpDiv.style.cssText = `
         position: absolute;
@@ -800,23 +795,8 @@ window.onload = async () => {
     try {
         const program = initGL();
         if (program) {
-            // Initialize audio manager
-            window.audioManager = new AudioManager();
-            
-            // Set up volume control
-            const volumeSlider = document.getElementById('volumeSlider');
-            if (volumeSlider) {
-                volumeSlider.value = 0.5; // Default volume
-                volumeSlider.addEventListener('input', (e) => {
-                    const volume = parseFloat(e.target.value);
-                    window.audioManager.setMasterVolume(volume);
-                });
-            }
-            
-            // Wait for textures to load
+            window.audioManager = new AudioManager(); // Initialize audioManager
             await loadTextures(program);
-            
-            // Start game loop
             gameLoop(program);
         }
     } catch (error) {

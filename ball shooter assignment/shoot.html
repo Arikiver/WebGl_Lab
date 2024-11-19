@@ -15,52 +15,24 @@
             font-family: 'Arial', sans-serif;
             min-height: 100vh;
             display: flex;
-            flex-direction: column;
-            align-items: center;
+            justify-content: center; /* Centers vertically */
+            align-items: center; /* Centers horizontally */
             color: white;
         }
 
-        .volume-control {
-            margin-bottom: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(5px);
-            padding: 10px 20px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .volume-control input[type="range"] {
-            -webkit-appearance: none;
-            width: 150px;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
-            outline: none;
-        }
-
-        .volume-control input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 15px;
-            height: 15px;
-            background: #fff;
-            border-radius: 50%;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .volume-control input[type="range"]::-webkit-slider-thumb:hover {
-            transform: scale(1.2);
-        }
 
         /* Game container */
         .game-container {
-            position: relative;
-            margin: 20px auto;
             width: 800px;
+            height: 600px; /* Ensure the height matches the canvas */
+            margin: auto; /* Centers horizontally */
+            top: 50%;
+            position: absolute; /* Changed from fixed to absolute */
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
+
 
         /* Canvas styling */
         #gameCanvas {
@@ -121,6 +93,7 @@
         .lives-container {
             display: flex;
             gap: 10px;
+            transform: translateY(10px);
         }
 
         /* Updated heart styling to add spacing */
@@ -271,11 +244,6 @@
     </style>
 </head>
 <body>
-    <!-- Volume Control moved outside game container -->
-    <div class="volume-control">
-        🔊 <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="0.5">
-    </div>
-
     <div class="game-container">
         <!-- Game HUD -->
         <div class="game-hud">
