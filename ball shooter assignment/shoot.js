@@ -219,26 +219,26 @@ function loadTextures(program) {
             const image = new Image();
             
             gl.bindTexture(gl.TEXTURE_2D, texture);
+            // Set a default placeholder color
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, 
-                         new Uint8Array([0, 0, 0, 255]));
+                         new Uint8Array([100, 149, 237, 255])); // Cornflower blue
 
             image.onload = () => {
                 gl.bindTexture(gl.TEXTURE_2D, texture);
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
 
-                if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
-                    gl.generateMipmap(gl.TEXTURE_2D);
-                } else {
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);  // Changed to REPEAT for background
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);  // Changed to REPEAT for background
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-                }
+                // Texture parameters for non-power-of-2 textures
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
                 resolve(texture);
             };
 
             image.onerror = () => {
-                reject(new Error(`Failed to load texture: ${url}`));
+                console.warn(`Failed to load texture: ${url}`);
+                resolve(null); // Resolve with null instead of rejecting
             };
 
             image.src = url;
@@ -250,12 +250,12 @@ function loadTextures(program) {
         loadImageTexture('player.png'),
         loadImageTexture('block.png'),
         loadImageTexture('projectile.png'),
-        loadImageTexture('space.jpg')  // Add space background
+        loadImageTexture('space.jpg')
     ]).then(([playerTex, blockTex, projectileTex, backgroundTex]) => {
         textures.player = playerTex;
         textures.block = blockTex;
         textures.projectile = projectileTex;
-        textures.background = backgroundTex;
+        textures.background = backgroundTex || createColorTexture(100, 149, 237, 255); // Fallback color
         return true;
     }).catch(error => {
         console.error('Error loading textures:', error);
@@ -412,61 +412,81 @@ function drawTexturedRectangle(program, x, y, width, height, texture, color = nu
 // Audio Manager class to handle all game sounds
 class AudioManager {
     constructor() {
+        this.masterVolume = 0.5; // Default volume
+
         // Create dummy audio elements that won't throw errors if files aren't found
         this.sounds = {
-            background: new Audio(),
-            shoot: new Audio(),
-            hit: new Audio(),
-            gameOver: new Audio()
+            background: new Audio('music/background.mp3'),
+            shoot: new Audio('sounds/shoot.mp3'),
+            hit: new Audio('sounds/hit.mp3'),
+            gameOver: new Audio('sounds/gameover.mp3')
         };
-
-        // Set default sources - these will fail gracefully if files don't exist
-        this.sounds.background.src = 'music/background.mp3';
-        this.sounds.shoot.src = 'sounds/shoot.mp3';
-        this.sounds.hit.src = 'sounds/hit.mp3';
-        this.sounds.gameOver.src = 'sounds/gameover.mp3';
 
         // Configure background music
         this.sounds.background.loop = true;
-        this.sounds.background.volume = 0.5;
 
-        // Add error handling that won't break the game
+        // Set initial volume for all sounds
         Object.values(this.sounds).forEach(audio => {
-            audio.addEventListener('error', () => {
-                console.warn(`Audio file not found: ${audio.src}`);
+            audio.volume = this.masterVolume;
+        });
+
+        // Add error handling
+        Object.values(this.sounds).forEach(audio => {
+            audio.addEventListener('error', (e) => {
+                console.warn(`Audio file not found or error:`, e);
             });
         });
     }
 
-    // Modified methods with error handling
-    playBackground() {
-        this.sounds.background.play().catch(() => {});
+    setMasterVolume(volume) {
+        this.masterVolume = Math.max(0, Math.min(1, volume)); // Clamp between 0 and 1
+        
+        Object.values(this.sounds).forEach(audio => {
+            try {
+                audio.volume = this.masterVolume;
+            } catch (error) {
+                console.warn('Error setting volume:', error);
+            }
+        });
     }
 
-    stopBackground() {
+    // Add these new methods to play sounds
+    playBackground() {
         try {
-            this.sounds.background.pause();
             this.sounds.background.currentTime = 0;
-        } catch (e) {}
+            this.sounds.background.play().catch(e => console.warn('Error playing background:', e));
+        } catch (error) {
+            console.warn('Error playing background sound:', error);
+        }
     }
 
     playShoot() {
-        this.sounds.shoot.play().catch(() => {});
+        try {
+            const shoot = this.sounds.shoot.cloneNode();
+            shoot.volume = this.masterVolume;
+            shoot.play().catch(e => console.warn('Error playing shoot:', e));
+        } catch (error) {
+            console.warn('Error playing shoot sound:', error);
+        }
     }
 
     playHit() {
-        this.sounds.hit.play().catch(() => {});
+        try {
+            const hit = this.sounds.hit.cloneNode();
+            hit.volume = this.masterVolume;
+            hit.play().catch(e => console.warn('Error playing hit:', e));
+        } catch (error) {
+            console.warn('Error playing hit sound:', error);
+        }
     }
 
     playGameOver() {
-        this.stopBackground();
-        this.sounds.gameOver.play().catch(() => {});
-    }
-
-    setMasterVolume(volume) {
-        Object.values(this.sounds).forEach(audio => {
-            audio.volume = volume;
-        });
+        try {
+            this.sounds.gameOver.currentTime = 0;
+            this.sounds.gameOver.play().catch(e => console.warn('Error playing game over:', e));
+        } catch (error) {
+            console.warn('Error playing game over sound:', error);
+        }
     }
 }
 
@@ -678,12 +698,67 @@ function render(program) {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     try {
-        // Draw background first
+        // Draw background first (with null check)
         if (textures.background) {
+            gl.activeTexture(gl.TEXTURE0);
             drawTexturedRectangle(program, 0, 0, canvas.width, canvas.height, textures.background);
         }
 
-        // Rest of your rendering code...
+        // Draw player
+        if (textures.player) {
+            drawTexturedRectangle(program, player.x, player.y, player.width, player.height, textures.player);
+        }
+
+        // Draw blocks
+        blocks.forEach(block => {
+            if (textures.block) {
+                drawTexturedRectangle(program, block.x, block.y, block.width, block.height, textures.block);
+            }
+        });
+
+        // Draw health bars for blocks
+        blocks.forEach(block => {
+            // Calculate health percentage
+            const healthPercentage = block.hitPoints / block.maxHitPoints;
+            
+            // Choose color based on health
+            let healthColor;
+            if (healthPercentage > 0.66) {
+                healthColor = [0, 1, 0, 0.8]; // Green
+            } else if (healthPercentage > 0.33) {
+                healthColor = [1, 1, 0, 0.8]; // Yellow
+            } else {
+                healthColor = [1, 0, 0, 0.8]; // Red
+            }
+            
+            // Draw background of health bar
+            drawTexturedRectangle(program, 
+                block.x, 
+                block.y - 10, // Positioned just above the block
+                block.width, 
+                5, 
+                null, 
+                [0.2, 0.2, 0.2, 0.5] // Dark gray background
+            );
+            
+            // Draw actual health bar
+            drawTexturedRectangle(program, 
+                block.x, 
+                block.y - 10, 
+                block.width * healthPercentage, 
+                5, 
+                null, 
+                healthColor
+            );
+        });
+
+        // Draw projectiles
+        projectiles.forEach(projectile => {
+            if (textures.projectile) {
+                drawTexturedRectangle(program, projectile.x, projectile.y, projectile.width, projectile.height, textures.projectile);
+            }
+        });
+
     } catch (error) {
         console.error('Error in render:', error);
     }
@@ -729,7 +804,14 @@ window.onload = async () => {
             window.audioManager = new AudioManager();
             
             // Set up volume control
-            addVolumeControl();
+            const volumeSlider = document.getElementById('volumeSlider');
+            if (volumeSlider) {
+                volumeSlider.value = 0.5; // Default volume
+                volumeSlider.addEventListener('input', (e) => {
+                    const volume = parseFloat(e.target.value);
+                    window.audioManager.setMasterVolume(volume);
+                });
+            }
             
             // Wait for textures to load
             await loadTextures(program);
