@@ -48,6 +48,16 @@ const LEVEL_CONFIG = {
         minSpawn: 1,
         maxSpawn: 2,
         patterns: ['triangle', 'wave']
+    },
+    6: { 
+        score: 700, 
+        size: 120, 
+        speed: 1.8, // Reduced from 3.2
+        health: 3, 
+        spawnRate: 6000, // Increased from 3
+        minSpawn: 1,
+        maxSpawn: 2,
+        patterns: ['triangle', 'wave', 'circle']
     }
 };
 
